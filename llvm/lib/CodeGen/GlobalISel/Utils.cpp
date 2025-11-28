@@ -234,11 +234,10 @@ bool llvm::isTriviallyDead(const MachineInstr &MI,
 
 static void reportGISelDiagnostic(DiagnosticSeverity Severity,
                                   MachineFunction &MF,
-                                  const TargetPassConfig &TPC,
                                   MachineOptimizationRemarkEmitter &MORE,
                                   MachineOptimizationRemarkMissed &R) {
-  bool IsFatal = Severity == DS_Error &&
-                 TPC.isGlobalISelAbortEnabled();
+  bool IsFatal =
+      Severity == DS_Error && isGlobalISelAbortEnabled(MF.getTarget().Options);
   // Print the function name explicitly if we don't have a debug location (which
   // makes the diagnostic less useful) or if we're going to emit a raw error.
   if (!R.getLocation().isValid() || IsFatal)
@@ -250,20 +249,24 @@ static void reportGISelDiagnostic(DiagnosticSeverity Severity,
     MORE.emit(R);
 }
 
-void llvm::reportGISelWarning(MachineFunction &MF, const TargetPassConfig &TPC,
-                              MachineOptimizationRemarkEmitter &MORE,
-                              MachineOptimizationRemarkMissed &R) {
-  reportGISelDiagnostic(DS_Warning, MF, TPC, MORE, R);
+bool llvm::isGlobalISelAbortEnabled(const TargetOptions &Options) {
+  return Options.GlobalISelAbort == GlobalISelAbortMode::Enable;
 }
 
-void llvm::reportGISelFailure(MachineFunction &MF, const TargetPassConfig &TPC,
+void llvm::reportGISelWarning(MachineFunction &MF,
+                              MachineOptimizationRemarkEmitter &MORE,
+                              MachineOptimizationRemarkMissed &R) {
+  reportGISelDiagnostic(DS_Warning, MF, MORE, R);
+}
+
+void llvm::reportGISelFailure(MachineFunction &MF,
                               MachineOptimizationRemarkEmitter &MORE,
                               MachineOptimizationRemarkMissed &R) {
   MF.getProperties().setFailedISel();
-  reportGISelDiagnostic(DS_Error, MF, TPC, MORE, R);
+  reportGISelDiagnostic(DS_Error, MF, MORE, R);
 }
 
-void llvm::reportGISelFailure(MachineFunction &MF, const TargetPassConfig &TPC,
+void llvm::reportGISelFailure(MachineFunction &MF,
                               MachineOptimizationRemarkEmitter &MORE,
                               const char *PassName, StringRef Msg,
                               const MachineInstr &MI) {
@@ -271,9 +274,10 @@ void llvm::reportGISelFailure(MachineFunction &MF, const TargetPassConfig &TPC,
                                     MI.getDebugLoc(), MI.getParent());
   R << Msg;
   // Printing MI is expensive;  only do it if expensive remarks are enabled.
-  if (TPC.isGlobalISelAbortEnabled() || MORE.allowExtraAnalysis(PassName))
+  if (isGlobalISelAbortEnabled(MF.getTarget().Options) ||
+      MORE.allowExtraAnalysis(PassName))
     R << ": " << ore::MNV("Inst", MI);
-  reportGISelFailure(MF, TPC, MORE, R);
+  reportGISelFailure(MF, MORE, R);
 }
 
 unsigned llvm::getInverseGMinMaxOpcode(unsigned MinMaxOpc) {

@@ -510,8 +510,8 @@ protected:
   /// Optimization mode of the pass.
   Mode OptMode;
 
-  /// Current target configuration. Controls how the pass handles errors.
-  const TargetPassConfig *TPC;
+  /// Controls how the pass handles errors.
+  bool GlobalISelAbortEnabled;
 
   /// Assign the register bank of each operand of \p MI.
   /// \return True on success, false otherwise.
