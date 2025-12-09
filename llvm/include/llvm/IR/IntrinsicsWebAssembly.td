@@ -121,10 +121,10 @@ def int_wasm_trunc_saturate_unsigned :
 // Uzumaki intrinsics
 
 def int_wasm_uzumaki_i32 :
-  DefaultAttrsIntrinsic<[llvm_i32_ty], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[llvm_i32_ty], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_uzumaki_i64 :
-  DefaultAttrsIntrinsic<[llvm_i64_ty], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[llvm_i64_ty], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 //===----------------------------------------------------------------------===//
 // Inference block intrinsics
@@ -135,28 +135,28 @@ def int_wasm_uzumaki_i64 :
 // transforms into proper blocks
 
 def int_wasm_forall_start :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_forall_end :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_exists_start :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_exists_end :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_assume_start :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_assume_end :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_unique_start :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 def int_wasm_unique_end :
-  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects]>;
+  DefaultAttrsIntrinsic<[], [], [IntrNoMem, IntrHasSideEffects, IntrConvergent]>;
 
 //===----------------------------------------------------------------------===//
 // Exception handling intrinsics
