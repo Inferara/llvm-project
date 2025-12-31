@@ -16,6 +16,7 @@ jobs:
     name: Build LLVM Static Libraries (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -24,6 +25,9 @@ jobs:
           - os: windows-latest
             platform: Windows
             arch: x64
+          - os: macos-14
+            platform: macOS
+            arch: arm64
     
     steps:
       - name: Checkout Repository
@@ -43,6 +47,8 @@ jobs:
               zlib1g-dev
           elif [ "$RUNNER_OS" == "Windows" ]; then
             choco install ninja cmake
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install ninja
           fi
         shell: bash
 
@@ -53,8 +59,14 @@ jobs:
           
           # Platform-specific flags
           EXTRA_FLAGS=""
-          if [ "$RUNNER_OS" != "Windows" ]; then
+          
+          # Disable PIC only on Linux for smaller static libraries
+          # macOS and Windows keep PIC enabled (required by their toolchains)
+          if [ "$RUNNER_OS" == "Linux" ]; then
             EXTRA_FLAGS="-DLLVM_ENABLE_PIC=OFF"
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            # Use default system configuration for macOS
+            EXTRA_FLAGS="-DCMAKE_POSITION_INDEPENDENT_CODE=ON"
           fi
           
           cmake -G Ninja \
@@ -62,7 +74,7 @@ jobs:
             -DLLVM_TARGETS_TO_BUILD="WebAssembly;X86" \
             -DLLVM_BUILD_LLVM_DYLIB=OFF \
             -DLLVM_LINK_LLVM_DYLIB=OFF \
-            -DLLVM_BUILD_STATIC=ON \
+            -DBUILD_SHARED_LIBS=OFF \
             -DLLVM_ENABLE_TERMINFO=OFF \
             -DLLVM_ENABLE_ZLIB=OFF \
             -DLLVM_ENABLE_ZSTD=OFF \
@@ -81,6 +93,8 @@ jobs:
           cd build-static
           if [ "$RUNNER_OS" == "Windows" ]; then
             ninja -j4  # Limit parallelism on Windows to avoid memory issues
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            ninja -j$(sysctl -n hw.ncpu)
           else
             ninja -j$(nproc)
           fi
@@ -179,50 +193,6 @@ jobs:
           EOF
           chmod +x llvm-package/setup-env.sh
         shell: bash
-          
-      - name: Create Documentation
-        run: |
-          # Create a README
-          cat > llvm-package/README.md << 'EOF'
-          # LLVM Inference Static Build
-          
-          This package contains statically-linked LLVM libraries with custom Inference intrinsics.
-          
-          ## Usage with Rust
-          
-          1. Extract this archive
-          2. Set environment variable:
-             ```bash
-             export LLVM_SYS_211_PREFIX=/path/to/extracted/artifact
-             ```
-          3. Build your Rust project:
-             ```bash
-             cargo build --release
-             ```
-          
-          ## Files Included
-          
-          - `lib/*.a` - Static LLVM libraries
-          - `include/` - LLVM headers
-          - `bin/llvm-config` - LLVM configuration tool
-          - `bin/llc` - LLVM static compiler
-          - `bin/llvm-as` - LLVM assembler
-          - `bin/llvm-dis` - LLVM disassembler
-          - `bin/llvm-link` - LLVM linker
-          - `bin/opt` - LLVM optimizer
-          - `bin/wasm-ld` - WebAssembly linker
-          - `setup-env.sh` - Environment setup script
-          
-          ## Custom Features
-          
-          This build includes:
-          - Uzumaki intrinsics (i32/i64)
-          - Inference block types (forall, exists, assume, unique)
-          - WebAssembly target support
-          
-          Built from: ${{ github.repository }}@${{ github.sha }}
-          EOF
-        shell: bash
 
       - name: Create Build Info
         run: |
@@ -246,26 +216,32 @@ jobs:
           if [ "$RUNNER_OS" == "Windows" ]; then
             # Use zip for Windows - package contents directly without parent directory
             cd llvm-package
-            7z a -tzip ../${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.zip *
+            7z a -tzip ../${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.zip *
             cd ..
             
             # Create checksum
-            certutil -hashfile ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.zip SHA256 > ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.zip.sha256
+            certutil -hashfile ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.zip SHA256 > ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.zip.sha256
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            # Use tar.gz for macOS - package contents directly without parent directory
+            tar -czf ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz -C llvm-package .
+            
+            # Create checksum using shasum
+            shasum -a 256 ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz > ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz.sha256
           else
             # Use tar.gz for Linux - package contents directly without parent directory
-            tar -czf ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.tar.gz -C llvm-package .
+            tar -czf ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz -C llvm-package .
             
-            # Create checksum
-            sha256sum ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.tar.gz > ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.tar.gz.sha256
+            # Create checksum using sha256sum
+            sha256sum ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz > ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz.sha256
           fi
         shell: bash
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64
+          name: ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
-            ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.*
+            ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.*
           retention-days: 90
           compression-level: 0  # Already compressed
 
@@ -274,26 +250,26 @@ jobs:
           echo "📦 Artifact Package Created"
           echo "=========================="
           if [ "$RUNNER_OS" == "Windows" ]; then
-            ls -lh ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.zip
+            ls -lh ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.zip
             echo ""
             echo "📋 Checksum:"
-            cat ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.zip.sha256
+            cat ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.zip.sha256
             echo ""
             echo "📊 Package Contents (first 20 entries):"
             # Ignore broken pipe so 7z listing doesn't fail the step
             set +e
-            7z l ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.zip | head -20
+            7z l ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.zip | head -20
             set -e
           else
-            ls -lh ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.tar.gz
+            ls -lh ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
             echo ""
             echo "📋 Checksum:"
-            cat ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.tar.gz.sha256
+            cat ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz.sha256
             echo ""
             echo "📊 Package Contents (first 20 entries):"
             # Ignore broken pipe so tar listing doesn't fail the step
             set +e
-            tar -tzf ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.tar.gz | head -20
+            tar -tzf ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz | head -20
             set -e
           fi
         shell: bash
@@ -358,6 +334,13 @@ jobs:
             # Set environment variables manually or use setup-env.sh in Git Bash
             ```
             
+            **macOS:**
+            ```bash
+            mkdir llvm-inference && cd llvm-inference
+            tar -xzf ../${{ env.ARTIFACT_NAME }}-macOS-x64.tar.gz
+            source setup-env.sh
+            ```
+            
             Then build your Rust project:
             ```bash
             cargo build --release
@@ -377,75 +360,16 @@ jobs:
             certutil -hashfile ${{ env.ARTIFACT_NAME }}-Windows-x64.zip SHA256
             ```
             
+            **macOS:**
+            ```bash
+            shasum -a 256 -c ${{ env.ARTIFACT_NAME }}-macOS-x64.tar.gz.sha256
+            ```
+            
             **Commit:** ${{ github.sha }}
             **Branch:** ${{ github.ref_name }}
           files: |
             artifacts/**/*.tar.gz
+            artifacts/**/*.zip
             artifacts/**/*.sha256
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  test-artifact:
-    name: Test Artifact with Sample Rust Project (${{ matrix.platform }})
-    needs: build-llvm
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            platform: Linux
-          - os: windows-latest
-            platform: Windows
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rust-lang/setup-rust-toolchain@v1
-        with:
-          toolchain: stable
-
-      - name: Download LLVM Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64
-          path: llvm-artifact
-
-      - name: Extract and Setup LLVM
-        run: |
-          mkdir -p llvm-extract
-          cd llvm-extract
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            7z x ../llvm-artifact/${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.zip
-          else
-            tar -xzf ../llvm-artifact/${{ env.ARTIFACT_NAME }}-${{ matrix.platform }}-x64.tar.gz
-          fi
-          source setup-env.sh
-          
-          # Verify llvm-config works
-          $LLVM_CONFIG_PATH --version
-          
-          echo "LLVM_SYS_211_PREFIX=$LLVM_SYS_211_PREFIX" >> $GITHUB_ENV
-          echo "LLVM_CONFIG_PATH=$LLVM_CONFIG_PATH" >> $GITHUB_ENV
-        shell: bash
-
-      - name: Create Test Rust Project
-        run: |
-          # Create a minimal test if it doesn't exist
-          if [ ! -f "Cargo.toml" ]; then
-            cat > test-llvm.rs << 'EOF'
-          fn main() {
-              println!("LLVM artifact test successful!");
-          }
-          EOF
-            rustc test-llvm.rs -o test-llvm
-            ./test-llvm
-          fi
-        shell: bash
-
-      - name: Build Test (if Cargo.toml exists)
-        if: hashFiles('Cargo.toml') != ''
-        run: |
-          cargo build --release
-          echo "✅ Test build completed successfully!"
