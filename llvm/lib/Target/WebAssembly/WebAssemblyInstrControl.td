@@ -205,3 +205,21 @@ let isTerminator = 1, hasCtrlDep = 1, hasSideEffects = 1 in
 defm DELEGATE : NRI<(outs), (ins bb_op:$dst), [], "delegate \t $dst", 0x18>;
 
 } // Predicates = [HasExceptionHandling]
+
+//===----------------------------------------------------------------------===//
+// Inference block instructions
+//===----------------------------------------------------------------------===//
+
+// Inference block instructions: side-effect operations like exception handling
+let hasCtrlDep = 1, hasSideEffects = 1, Uses = [VALUE_STACK], Defs = [VALUE_STACK] in {
+defm INFERENCE_FORALL : NRI<(outs), (ins), [], "forall", 0xfc3a>;
+defm INFERENCE_EXISTS : NRI<(outs), (ins), [], "exists", 0xfc3b>;
+defm INFERENCE_ASSUME : NRI<(outs), (ins), [], "assume", 0xfc3c>;
+defm INFERENCE_UNIQUE : NRI<(outs), (ins), [], "unique", 0xfc3d>;
+
+// End markers for inference blocks (generate regular 'end' instruction)  
+defm INFERENCE_FORALL_END : NRI<(outs), (ins), [], "end", 0x0b>;
+defm INFERENCE_EXISTS_END : NRI<(outs), (ins), [], "end", 0x0b>;
+defm INFERENCE_ASSUME_END : NRI<(outs), (ins), [], "end", 0x0b>;
+defm INFERENCE_UNIQUE_END : NRI<(outs), (ins), [], "end", 0x0b>;
+}
